@@ -1,0 +1,36 @@
+{
+  "name": "Bench Scientist Tool",
+  "short_name": "Bench Tool",
+  "description": "Phone-first local bench science calculators, trackers, notes, and safety references.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#155e75",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dilution",
+      "short_name": "Dilution",
+      "url": "./?tool=dilution"
+    },
+    {
+      "name": "Buffers",
+      "short_name": "Buffers",
+      "url": "./?tool=buffers"
+    },
+    {
+      "name": "New Log",
+      "short_name": "Log",
+      "url": "./?tool=logs"
+    }
+  ]
+}
