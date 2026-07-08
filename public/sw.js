@@ -1,4 +1,4 @@
-const CACHE_NAME = "bench-scientist-tool-v2";
+const CACHE_NAME = "bench-scientist-tool-v3";
 const BASE_URL = new URL(self.registration.scope);
 const appUrl = (path) => new URL(path, BASE_URL).pathname;
 const APP_SHELL = [
@@ -25,6 +25,19 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(appUrl("index.html"), copy));
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached ?? caches.match(appUrl("index.html"))))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
