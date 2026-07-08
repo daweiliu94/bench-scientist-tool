@@ -4,17 +4,25 @@ import {
   AlertTriangle,
   Archive,
   Beaker,
+  Calculator,
   Camera,
   ChevronDown,
+  ClipboardList,
   Download,
+  FlaskConical,
   Home,
-  Image,
-  Mic,
+  ImagePlus,
+  Layers,
+  NotebookPen,
+  PackageSearch,
   Plus,
   QrCode,
   Save,
   Search,
   ShieldAlert,
+  ShieldCheck,
+  Sigma,
+  TestTube,
   Trash2,
   Upload
 } from "lucide-react";
@@ -67,14 +75,18 @@ const GROUPS: Array<{ id: ToolGroup; title: string; icon: typeof Home }> = [
   { id: "safety", title: "Safety", icon: ShieldAlert }
 ];
 
-type SpeechRecognitionCtor = new () => {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: (event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
-  onerror: () => void;
-  start: () => void;
-  stop: () => void;
+const TOOL_ICONS: Record<ToolId, typeof Home> = {
+  dilution: FlaskConical,
+  mastermix: Layers,
+  buffers: Beaker,
+  qpcr: Sigma,
+  cells: TestTube,
+  units: Calculator,
+  samples: ClipboardList,
+  inventory: PackageSearch,
+  logs: NotebookPen,
+  gels: ImagePlus,
+  safety: ShieldCheck
 };
 
 function today() {
@@ -304,7 +316,7 @@ function App() {
           const firstInGroup = TOOLS.find((tool) => tool.group === group.id)?.id ?? "dilution";
           return (
             <button key={group.id} className={group.id === activeGroup ? "active" : ""} onClick={() => chooseTool(firstInGroup)}>
-              <Icon size={18} aria-hidden="true" />
+              <Icon aria-hidden="true" />
               <span>{group.title}</span>
             </button>
           );
@@ -312,11 +324,15 @@ function App() {
       </nav>
 
       <div className="tool-strip" role="list" aria-label="Tools">
-        {TOOLS.filter((tool) => tool.group === activeGroup).map((tool) => (
-          <button key={tool.id} className={tool.id === activeTool ? "active" : ""} onClick={() => chooseTool(tool.id)}>
-            {tool.shortTitle}
-          </button>
-        ))}
+        {TOOLS.filter((tool) => tool.group === activeGroup).map((tool) => {
+          const Icon = TOOL_ICONS[tool.id];
+          return (
+            <button key={tool.id} className={tool.id === activeTool ? "active" : ""} onClick={() => chooseTool(tool.id)}>
+              <Icon aria-hidden="true" />
+              <span>{tool.shortTitle}</span>
+            </button>
+          );
+        })}
       </div>
 
       <ToolHost
@@ -381,7 +397,16 @@ function ToolHost(props: {
   }
 }
 
+type DilutionMode = "c1v1" | "molarity" | "serial";
+
+const DILUTION_MODES: Array<{ id: DilutionMode; title: string; icon: typeof Home }> = [
+  { id: "c1v1", title: "C1V1", icon: FlaskConical },
+  { id: "molarity", title: "Molarity", icon: Calculator },
+  { id: "serial", title: "Serial", icon: Layers }
+];
+
 function DilutionTool() {
+  const [mode, setMode] = useState<DilutionMode>("c1v1");
   const [stock, setStock] = useState(100);
   const [stockUnit, setStockUnit] = useState("uM");
   const [target, setTarget] = useState(1);
@@ -408,64 +433,83 @@ function DilutionTool() {
   const serial = serialDilution(stockM, factor, steps);
 
   return (
-    <div className="tool-grid">
-      <Panel title="C1V1">
-        <div className="fields">
-          <NumberWithUnitField label="Stock concentration" value={stock} onChange={setStock} unit={stockUnit} onUnitChange={setStockUnit} units={CONCENTRATION_UNITS} min={0} />
-          <NumberWithUnitField label="Target concentration" value={target} onChange={setTarget} unit={targetUnit} onUnitChange={setTargetUnit} units={CONCENTRATION_UNITS} min={0} />
-          <NumberWithUnitField label="Final volume" value={finalVolume} onChange={setFinalVolume} unit={finalVolumeUnit} onUnitChange={setFinalVolumeUnit} units={VOLUME_UNITS} min={0} />
-        </div>
-        <div className="stats">
-          <Stat label="Stock volume" value={`${formatNumber(dilution.stockVolume)} ${finalVolumeUnit}`} tone={dilution.possible ? "ok" : "warn"} />
-          <Stat label="Diluent" value={`${formatNumber(dilution.diluentVolume)} ${finalVolumeUnit}`} />
-        </div>
-      </Panel>
-      <Panel title="Mass and Molarity">
-        <div className="fields">
-          <NumberWithUnitField label="Mass" value={mass} onChange={setMass} unit={massUnit} onUnitChange={setMassUnit} units={MASS_UNITS} min={0} />
-          <NumberField label="MW (g/mol)" value={mw} onChange={setMw} min={0} />
-          <NumberWithUnitField label="Volume" value={volume} onChange={setVolume} unit={volumeUnit} onUnitChange={setVolumeUnit} units={VOLUME_UNITS} min={0} />
-          <NumberWithUnitField
-            label="Desired concentration"
-            value={desiredConcentration}
-            onChange={setDesiredConcentration}
-            unit={desiredConcentrationUnit}
-            onUnitChange={setDesiredConcentrationUnit}
-            units={CONCENTRATION_UNITS}
-            min={0}
-          />
-          <SelectField label="Molarity output" value={molarityUnit} options={CONCENTRATION_UNITS} onChange={setMolarityUnit} />
-        </div>
-        <div className="stats">
-          <Stat label="Molarity" value={`${formatNumber(convertUnit(molarityM, "M", molarityUnit))} ${molarityUnit}`} />
-          <Stat label="Mass needed" value={`${formatNumber(convertUnit(requiredMassMg, "mg", massUnit))} ${massUnit}`} />
-        </div>
-      </Panel>
-      <Panel title="Serial Dilution">
-        <div className="fields">
-          <NumberWithUnitField label="Start concentration" value={stock} onChange={setStock} unit={stockUnit} onUnitChange={setStockUnit} units={CONCENTRATION_UNITS} min={0} />
-          <NumberField label="Factor" value={factor} onChange={setFactor} min={0} />
-          <NumberField label="Steps" value={steps} onChange={setSteps} min={1} step={1} />
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Step</th>
-                <th>Concentration ({stockUnit})</th>
-              </tr>
-            </thead>
-            <tbody>
-              {serial.map((row) => (
-                <tr key={row.step}>
-                  <td>{row.step}</td>
-                  <td>{formatNumber(convertUnit(row.concentration, "M", stockUnit))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+    <div className="subtool-shell">
+      <nav className="subtool-tabs" aria-label="Dilution calculators">
+        {DILUTION_MODES.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button key={item.id} className={item.id === mode ? "active" : ""} onClick={() => setMode(item.id)}>
+              <Icon aria-hidden="true" />
+              <span>{item.title}</span>
+            </button>
+          );
+        })}
+      </nav>
+      <div className="focused-tool">
+        {mode === "c1v1" ? (
+          <Panel title="C1V1">
+            <div className="fields">
+              <NumberWithUnitField label="Stock concentration" value={stock} onChange={setStock} unit={stockUnit} onUnitChange={setStockUnit} units={CONCENTRATION_UNITS} min={0} />
+              <NumberWithUnitField label="Target concentration" value={target} onChange={setTarget} unit={targetUnit} onUnitChange={setTargetUnit} units={CONCENTRATION_UNITS} min={0} />
+              <NumberWithUnitField label="Final volume" value={finalVolume} onChange={setFinalVolume} unit={finalVolumeUnit} onUnitChange={setFinalVolumeUnit} units={VOLUME_UNITS} min={0} />
+            </div>
+            <div className="stats">
+              <Stat label="Stock volume" value={`${formatNumber(dilution.stockVolume)} ${finalVolumeUnit}`} tone={dilution.possible ? "ok" : "warn"} />
+              <Stat label="Diluent" value={`${formatNumber(dilution.diluentVolume)} ${finalVolumeUnit}`} />
+            </div>
+          </Panel>
+        ) : null}
+        {mode === "molarity" ? (
+          <Panel title="Mass and Molarity">
+            <div className="fields">
+              <NumberWithUnitField label="Mass" value={mass} onChange={setMass} unit={massUnit} onUnitChange={setMassUnit} units={MASS_UNITS} min={0} />
+              <NumberField label="MW (g/mol)" value={mw} onChange={setMw} min={0} />
+              <NumberWithUnitField label="Volume" value={volume} onChange={setVolume} unit={volumeUnit} onUnitChange={setVolumeUnit} units={VOLUME_UNITS} min={0} />
+              <NumberWithUnitField
+                label="Desired concentration"
+                value={desiredConcentration}
+                onChange={setDesiredConcentration}
+                unit={desiredConcentrationUnit}
+                onUnitChange={setDesiredConcentrationUnit}
+                units={CONCENTRATION_UNITS}
+                min={0}
+              />
+              <SelectField label="Molarity output" value={molarityUnit} options={CONCENTRATION_UNITS} onChange={setMolarityUnit} />
+            </div>
+            <div className="stats">
+              <Stat label="Molarity" value={`${formatNumber(convertUnit(molarityM, "M", molarityUnit))} ${molarityUnit}`} />
+              <Stat label="Mass needed" value={`${formatNumber(convertUnit(requiredMassMg, "mg", massUnit))} ${massUnit}`} />
+            </div>
+          </Panel>
+        ) : null}
+        {mode === "serial" ? (
+          <Panel title="Serial Dilution">
+            <div className="fields">
+              <NumberWithUnitField label="Start concentration" value={stock} onChange={setStock} unit={stockUnit} onUnitChange={setStockUnit} units={CONCENTRATION_UNITS} min={0} />
+              <NumberField label="Factor" value={factor} onChange={setFactor} min={0} />
+              <NumberField label="Steps" value={steps} onChange={setSteps} min={1} step={1} />
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Step</th>
+                    <th>Concentration ({stockUnit})</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {serial.map((row) => (
+                    <tr key={row.step}>
+                      <td>{row.step}</td>
+                      <td>{formatNumber(convertUnit(row.concentration, "M", stockUnit))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1096,33 +1140,6 @@ function ExperimentLogsTool(props: { logs: ExperimentLog[]; setLogs: Dispatch<Se
     setDraft({ id: uid("log"), title: "", project: "", startedAt: new Date().toISOString(), notes: "", photos: [] });
   }
 
-  function dictate() {
-    const SpeechRecognition =
-      (window as Window & { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor }).SpeechRecognition ??
-      (window as Window & { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor }).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setDraft((item) => ({ ...item, notes: `${item.notes}\nSpeech recognition unavailable in this browser.`.trim() }));
-      return;
-    }
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "en-US";
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((result) => result[0]?.transcript ?? "")
-        .join(" ")
-        .trim();
-      if (transcript) {
-        setDraft((item) => ({ ...item, notes: `${item.notes}\n${transcript}`.trim() }));
-      }
-    };
-    recognition.onerror = () => {
-      setDraft((item) => ({ ...item, notes: `${item.notes}\nSpeech capture stopped.`.trim() }));
-    };
-    recognition.start();
-  }
-
   return (
     <Panel title="Experiment Run Log">
       <div className="fields">
@@ -1132,13 +1149,15 @@ function ExperimentLogsTool(props: { logs: ExperimentLog[]; setLogs: Dispatch<Se
       <TextArea label="Notes" value={draft.notes} onChange={(notes) => setDraft((item) => ({ ...item, notes }))} />
       <div className="row-actions">
         <label className="action file-action">
-          <Camera size={17} aria-hidden="true" />
-          <span>Photo</span>
-          <input type="file" accept="image/*" capture="environment" multiple onChange={(event) => addPhotos(event.target.files)} />
+          <Upload size={17} aria-hidden="true" />
+          <span>Upload photos</span>
+          <input type="file" accept="image/*" multiple onChange={(event) => addPhotos(event.target.files)} />
         </label>
-        <ActionButton icon={Mic} onClick={dictate}>
-          Voice
-        </ActionButton>
+        <label className="action file-action">
+          <Camera size={17} aria-hidden="true" />
+          <span>Take photo</span>
+          <input type="file" accept="image/*" capture="environment" onChange={(event) => addPhotos(event.target.files)} />
+        </label>
         <ActionButton icon={Save} variant="primary" onClick={save}>
           Save
         </ActionButton>
@@ -1198,8 +1217,13 @@ function GelTool(props: { gels: GelRecord[]; setGels: Dispatch<SetStateAction<Ge
       </div>
       <div className="row-actions">
         <label className="action file-action">
-          <Image size={17} aria-hidden="true" />
-          <span>Image</span>
+          <Upload size={17} aria-hidden="true" />
+          <span>Upload image</span>
+          <input type="file" accept="image/*" onChange={(event) => setImage(event.target.files?.[0])} />
+        </label>
+        <label className="action file-action">
+          <Camera size={17} aria-hidden="true" />
+          <span>Take photo</span>
           <input type="file" accept="image/*" capture="environment" onChange={(event) => setImage(event.target.files?.[0])} />
         </label>
         <ActionButton icon={Save} variant="primary" onClick={save} disabled={!draft.image}>

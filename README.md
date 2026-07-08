@@ -22,9 +22,9 @@ A phone-first, local-first Progressive Web App for common biology bench workflow
 - Buffer/media scaler with editable buffer names, target-volume units, and component units
 - qPCR delta-delta Ct helper with efficiency and fold-change readout
 - Cell culture counter, viability, and seeding-volume calculator
-- Experiment log with text, speech capture where supported, camera/photo attachments, and timestamps
+- Experiment log with text notes, photo-library uploads, camera-app photo attachments, and timestamps
 - Reagent inventory with low-stock and expiration flags
-- Gel/blot image capture with lane annotations
+- Gel/blot image upload or camera capture with lane annotations
 - Unit conversion for mass, volume, concentration, temperature, RPM, and RCF
 - Safety quick reference with PPE, waste, SDS links, and notes
 - Local JSON backup export/import
