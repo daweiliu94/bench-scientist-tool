@@ -269,6 +269,15 @@ function EmptyState(props: { text: string }) {
   return <p className="empty">{props.text}</p>;
 }
 
+function editableNumberValue(value: number) {
+  return Number.isFinite(value) && value !== 0 ? String(value) : "";
+}
+
+function parseEditableNumber(value: string) {
+  if (!value.trim()) return 0;
+  return safeNumber(value);
+}
+
 function App() {
   const urlTool = new URLSearchParams(window.location.search).get("tool") as ToolId | null;
   const firstTool = TOOLS.some((tool) => tool.id === urlTool) ? urlTool : "dilution";
@@ -687,6 +696,8 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
   const [selectedId, setSelectedId] = useState(props.buffers[0]?.id ?? "");
   const [targetVolumeUnit, setTargetVolumeUnit] = useState("mL");
   const [draft, setDraft] = useState<BufferRecipe>(() => cloneBuffer(props.buffers[0] ?? createBlankBuffer()));
+  const [targetVolumeText, setTargetVolumeText] = useState(() => editableNumberValue(convertUnit(props.buffers[0]?.targetVolumeMl ?? 100, "mL", "mL")));
+  const [componentAmountText, setComponentAmountText] = useState<Record<string, string>>(() => amountTextByComponent(props.buffers[0] ?? createBlankBuffer()));
   const [bufferStatus, setBufferStatus] = useState("");
   const savedDraft = props.buffers.find((item) => item.id === draft.id);
   const draftIsSaved = Boolean(savedDraft);
@@ -695,14 +706,12 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
   useEffect(() => {
     const selected = props.buffers.find((item) => item.id === selectedId);
     if (selected) {
-      setDraft(cloneBuffer(selected));
-      setBufferStatus("");
+      loadDraft(selected, "");
       return;
     }
     if (!selectedId && props.buffers[0]) {
       setSelectedId(props.buffers[0].id);
-      setDraft(cloneBuffer(props.buffers[0]));
-      setBufferStatus("");
+      loadDraft(props.buffers[0], "");
     }
   }, [props.buffers, selectedId]);
 
@@ -717,24 +726,53 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
     };
   }
 
+  function amountTextByComponent(buffer: BufferRecipe) {
+    return Object.fromEntries(buffer.components.map((component) => [component.id, editableNumberValue(component.amountPerLiter)]));
+  }
+
+  function loadDraft(buffer: BufferRecipe, status: string) {
+    const next = cloneBuffer(buffer);
+    setDraft(next);
+    setTargetVolumeText(editableNumberValue(convertUnit(next.targetVolumeMl, "mL", targetVolumeUnit)));
+    setComponentAmountText(amountTextByComponent(next));
+    setBufferStatus(status);
+  }
+
   function editDraft(update: Partial<BufferRecipe>) {
     setDraft((item) => ({ ...item, ...update }));
     setBufferStatus("Unsaved changes");
+  }
+
+  function editTargetVolume(value: string) {
+    setTargetVolumeText(value);
+    editDraft({ targetVolumeMl: convertUnit(parseEditableNumber(value), targetVolumeUnit, "mL") });
+  }
+
+  function changeTargetVolumeUnit(unit: string) {
+    setTargetVolumeUnit(unit);
+    setTargetVolumeText(editableNumberValue(convertUnit(draft.targetVolumeMl, "mL", unit)));
+  }
+
+  function editComponentAmount(componentId: string, value: string) {
+    setComponentAmountText((items) => ({ ...items, [componentId]: value }));
+    editDraft({
+      components: draft.components.map((item) =>
+        item.id === componentId ? { ...item, amountPerLiter: parseEditableNumber(value) } : item
+      )
+    });
   }
 
   function selectBuffer(id: string) {
     const selected = props.buffers.find((item) => item.id === id);
     if (!selected) return;
     setSelectedId(selected.id);
-    setDraft(cloneBuffer(selected));
-    setBufferStatus("");
+    loadDraft(selected, "");
   }
 
   function addBufferDraft() {
     const next = createBlankBuffer();
     setSelectedId(next.id);
-    setDraft(next);
-    setBufferStatus("New buffer draft. Tap Save to keep it.");
+    loadDraft(next, "New buffer draft. Tap Save to keep it.");
   }
 
   function saveBuffer() {
@@ -744,16 +782,14 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
       return existing ? items.map((item) => (item.id === saved.id ? saved : item)) : [...items, saved];
     });
     setSelectedId(saved.id);
-    setDraft(saved);
-    setBufferStatus(`Saved ${saved.name}.`);
+    loadDraft(saved, `Saved ${saved.name}.`);
   }
 
   function deleteCurrentBuffer() {
     if (!draftIsSaved) {
       const fallback = props.buffers[0] ? cloneBuffer(props.buffers[0]) : createBlankBuffer();
       setSelectedId(fallback.id);
-      setDraft(fallback);
-      setBufferStatus(props.buffers[0] ? "Discarded unsaved buffer." : "New buffer draft. Tap Save to keep it.");
+      loadDraft(fallback, props.buffers[0] ? "Discarded unsaved buffer." : "New buffer draft. Tap Save to keep it.");
       return;
     }
 
@@ -761,16 +797,14 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
     if (remaining.length > 0) {
       props.setBuffers(remaining);
       setSelectedId(remaining[0].id);
-      setDraft(cloneBuffer(remaining[0]));
-      setBufferStatus("Deleted buffer.");
+      loadDraft(remaining[0], "Deleted buffer.");
       return;
     }
 
     const next = createBlankBuffer();
     props.setBuffers([]);
     setSelectedId(next.id);
-    setDraft(next);
-    setBufferStatus("Deleted buffer. New buffer draft ready.");
+    loadDraft(next, "Deleted buffer. New buffer draft ready.");
   }
 
   return (
@@ -806,15 +840,19 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
           <ChevronDown size={16} aria-hidden="true" />
         </label>
         <TextField label="Rename selected buffer" value={draft.name} onChange={(name) => editDraft({ name })} />
-        <NumberWithUnitField
-          label="Target volume"
-          value={convertUnit(draft.targetVolumeMl, "mL", targetVolumeUnit)}
-          onChange={(value) => editDraft({ targetVolumeMl: convertUnit(value, targetVolumeUnit, "mL") })}
-          unit={targetVolumeUnit}
-          onUnitChange={setTargetVolumeUnit}
-          units={["mL", "L"]}
-          min={0}
-        />
+        <label className="field unit-field">
+          <span>Target volume</span>
+          <div>
+            <input inputMode="decimal" type="text" value={targetVolumeText} onChange={(event) => editTargetVolume(event.target.value)} />
+            <select value={targetVolumeUnit} onChange={(event) => changeTargetVolumeUnit(event.target.value)} aria-label="Target volume unit">
+              {["mL", "L"].map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
+          </div>
+        </label>
       </div>
       {bufferStatus || isDirty ? <p className="status-line">{bufferStatus || "Unsaved changes"}</p> : null}
       <div className="table-wrap">
@@ -822,8 +860,10 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
           <thead>
             <tr>
               <th>Component</th>
-              <th>Per L</th>
-              <th>Need</th>
+              <th>Per 1 L</th>
+              <th>
+                Need for {formatNumber(convertUnit(draft.targetVolumeMl, "mL", targetVolumeUnit))} {targetVolumeUnit}
+              </th>
               <th></th>
             </tr>
           </thead>
@@ -844,17 +884,11 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
                 <td>
                   <div className="inline-inputs">
                     <input
-                      type="number"
+                      type="text"
                       inputMode="decimal"
-                      value={component.amountPerLiter}
+                      value={componentAmountText[component.id] ?? editableNumberValue(component.amountPerLiter)}
                       aria-label="Amount per liter"
-                      onChange={(event) =>
-                        editDraft({
-                          components: draft.components.map((item) =>
-                            item.id === component.id ? { ...item, amountPerLiter: safeNumber(event.target.value) } : item
-                          )
-                        })
-                      }
+                      onChange={(event) => editComponentAmount(component.id, event.target.value)}
                     />
                     <select
                       value={component.unit}
@@ -890,7 +924,14 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
         </table>
       </div>
       <div className="row-actions">
-        <ActionButton icon={Plus} onClick={() => editDraft({ components: [...draft.components, { id: uid("component"), name: "", amountPerLiter: 0, unit: "g" }] })}>
+        <ActionButton
+          icon={Plus}
+          onClick={() => {
+            const component = { id: uid("component"), name: "", amountPerLiter: 0, unit: "g" };
+            setComponentAmountText((items) => ({ ...items, [component.id]: "" }));
+            editDraft({ components: [...draft.components, component] });
+          }}
+        >
           Component
         </ActionButton>
       </div>
