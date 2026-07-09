@@ -16,7 +16,6 @@ import {
   NotebookPen,
   PackageSearch,
   Plus,
-  QrCode,
   Save,
   Search,
   ShieldAlert,
@@ -914,49 +913,10 @@ function UnitTool() {
 
 function SamplesTool(props: { samples: SampleRecord[]; setSamples: Dispatch<SetStateAction<SampleRecord[]>> }) {
   const [query, setQuery] = useState("");
-  const [scannerOpen, setScannerOpen] = useState(false);
   const [scanStatus, setScanStatus] = useState("");
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scannerControlsRef = useRef<{ stop: () => void } | null>(null);
   const emptySample = { id: uid("sample"), name: "", type: "", location: "", box: "", position: "", date: today(), freezeThaw: 0, notes: "" };
   const [draft, setDraft] = useState<SampleRecord>(emptySample);
   const filtered = props.samples.filter((sample) => JSON.stringify(sample).toLowerCase().includes(query.toLowerCase()));
-
-  useEffect(() => {
-    if (!scannerOpen) return;
-    let active = true;
-    async function startScanner() {
-      try {
-        const { BrowserMultiFormatReader } = await import("@zxing/browser");
-        const video = videoRef.current;
-        if (!video) return;
-        const reader = new BrowserMultiFormatReader();
-        const controls = await reader.decodeFromVideoDevice(undefined, video, (result) => {
-          const text = result?.getText();
-          if (!text || !active) return;
-          setDraft((item) => ({
-            ...item,
-            name: item.name || text,
-            notes: `${item.notes}\nScanned: ${text}`.trim()
-          }));
-          setScanStatus(`Scanned ${text}`);
-          scannerControlsRef.current?.stop();
-          setScannerOpen(false);
-        });
-        scannerControlsRef.current = controls;
-        setScanStatus("Camera ready");
-      } catch {
-        setScanStatus("Camera scanner unavailable. Enter the code manually.");
-        setScannerOpen(false);
-      }
-    }
-    startScanner();
-    return () => {
-      active = false;
-      scannerControlsRef.current?.stop();
-      scannerControlsRef.current = null;
-    };
-  }, [scannerOpen]);
 
   function save() {
     if (!draft.name.trim()) return;
@@ -964,19 +924,33 @@ function SamplesTool(props: { samples: SampleRecord[]; setSamples: Dispatch<SetS
     setDraft({ ...emptySample, id: uid("sample") });
   }
 
-  async function scanCode() {
-    setScanStatus("Starting camera");
-    setScannerOpen(true);
+  async function decodeCodePhoto(file?: File) {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setScanStatus("Reading code photo...");
+    try {
+      const { BrowserMultiFormatReader } = await import("@zxing/browser");
+      const reader = new BrowserMultiFormatReader();
+      const result = await reader.decodeFromImageUrl(url);
+      const text = result.getText();
+      setDraft((item) => ({
+        ...item,
+        name: item.name || text,
+        notes: `${item.notes}\nScanned: ${text}`.trim()
+      }));
+      setScanStatus(`Scanned ${text}`);
+    } catch {
+      setScanStatus("No code found. Try a sharper photo or enter the code manually.");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   return (
     <Panel
       title="Sample Tracker"
       actions={
-        <>
-          <IconButton label="Scan code" icon={QrCode} onClick={scanCode} />
-          <IconButton label="Export CSV" icon={Download} onClick={() => exportSamples(props.samples)} />
-        </>
+        <IconButton label="Export CSV" icon={Download} onClick={() => exportSamples(props.samples)} />
       }
     >
       <div className="fields">
@@ -987,29 +961,38 @@ function SamplesTool(props: { samples: SampleRecord[]; setSamples: Dispatch<SetS
         <TextField label="Position" value={draft.position} onChange={(position) => setDraft((item) => ({ ...item, position }))} />
         <NumberField label="Freeze/thaw" value={draft.freezeThaw} onChange={(freezeThaw) => setDraft((item) => ({ ...item, freezeThaw }))} min={0} step={1} />
       </div>
-      <TextArea label="Notes" value={draft.notes} onChange={(notes) => setDraft((item) => ({ ...item, notes }))} />
-      {scannerOpen || scanStatus ? (
-        <div className="scanner-box">
-          {scannerOpen ? <video ref={videoRef} muted playsInline /> : null}
-          <span>{scanStatus}</span>
-          {scannerOpen ? (
-            <IconButton
-              label="Stop scanner"
-              icon={Trash2}
-              variant="danger"
-              onClick={() => {
-                scannerControlsRef.current?.stop();
-                setScannerOpen(false);
-              }}
-            />
-          ) : null}
-        </div>
-      ) : null}
       <div className="row-actions">
+        <label className="action file-action">
+          <Upload size={17} aria-hidden="true" />
+          <span>Upload code photo</span>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(event) => {
+              decodeCodePhoto(event.target.files?.[0]);
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
+        <label className="action file-action">
+          <Camera size={17} aria-hidden="true" />
+          <span>Take code photo</span>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(event) => {
+              decodeCodePhoto(event.target.files?.[0]);
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
         <ActionButton icon={Save} variant="primary" onClick={save}>
           Save
         </ActionButton>
       </div>
+      {scanStatus ? <p className="status-line">{scanStatus}</p> : null}
+      <TextArea label="Notes" value={draft.notes} onChange={(notes) => setDraft((item) => ({ ...item, notes }))} />
       <label className="search">
         <Search size={18} aria-hidden="true" />
         <input value={query} placeholder="Search samples" onChange={(event) => setQuery(event.target.value)} />
