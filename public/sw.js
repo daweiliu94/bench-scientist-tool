@@ -1,4 +1,4 @@
-const CACHE_NAME = "bench-scientist-tool-v4";
+const CACHE_NAME = "bench-scientist-tool-v5";
 const BASE_URL = new URL(self.registration.scope);
 const appUrl = (path) => new URL(path, BASE_URL).pathname;
 const APP_SHELL = [

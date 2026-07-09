@@ -686,38 +686,91 @@ function MasterMixTool() {
 function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetStateAction<BufferRecipe[]>> }) {
   const [selectedId, setSelectedId] = useState(props.buffers[0]?.id ?? "");
   const [targetVolumeUnit, setTargetVolumeUnit] = useState("mL");
-  const buffer = props.buffers.find((item) => item.id === selectedId) ?? props.buffers[0];
+  const [draft, setDraft] = useState<BufferRecipe>(() => cloneBuffer(props.buffers[0] ?? createBlankBuffer()));
+  const [bufferStatus, setBufferStatus] = useState("");
+  const savedDraft = props.buffers.find((item) => item.id === draft.id);
+  const draftIsSaved = Boolean(savedDraft);
+  const isDirty = !savedDraft || JSON.stringify(savedDraft) !== JSON.stringify(draft);
 
   useEffect(() => {
-    if (!selectedId && props.buffers[0]) setSelectedId(props.buffers[0].id);
-  }, [props.buffers, selectedId]);
-
-  if (!buffer) return <EmptyState text="Add a buffer to start." />;
-
-  function updateBuffer(update: Partial<BufferRecipe>) {
-    props.setBuffers((items) => items.map((item) => (item.id === buffer.id ? { ...item, ...update } : item)));
-  }
-
-  function handleBufferName(value: string) {
-    const match = props.buffers.find((item) => item.name === value);
-    if (match && match.id !== buffer.id) {
-      setSelectedId(match.id);
+    const selected = props.buffers.find((item) => item.id === selectedId);
+    if (selected) {
+      setDraft(cloneBuffer(selected));
+      setBufferStatus("");
       return;
     }
-    updateBuffer({ name: value });
+    if (!selectedId && props.buffers[0]) {
+      setSelectedId(props.buffers[0].id);
+      setDraft(cloneBuffer(props.buffers[0]));
+      setBufferStatus("");
+    }
+  }, [props.buffers, selectedId]);
+
+  function createBlankBuffer(): BufferRecipe {
+    return { id: uid("buffer"), name: "New buffer", targetVolumeMl: 100, components: [], notes: "" };
+  }
+
+  function cloneBuffer(buffer: BufferRecipe): BufferRecipe {
+    return {
+      ...buffer,
+      components: buffer.components.map((component) => ({ ...component }))
+    };
+  }
+
+  function editDraft(update: Partial<BufferRecipe>) {
+    setDraft((item) => ({ ...item, ...update }));
+    setBufferStatus("Unsaved changes");
+  }
+
+  function selectBuffer(id: string) {
+    const selected = props.buffers.find((item) => item.id === id);
+    if (!selected) return;
+    setSelectedId(selected.id);
+    setDraft(cloneBuffer(selected));
+    setBufferStatus("");
+  }
+
+  function addBufferDraft() {
+    const next = createBlankBuffer();
+    setSelectedId(next.id);
+    setDraft(next);
+    setBufferStatus("New buffer draft. Tap Save to keep it.");
+  }
+
+  function saveBuffer() {
+    const saved = cloneBuffer({ ...draft, name: draft.name.trim() || "Untitled buffer" });
+    props.setBuffers((items) => {
+      const existing = items.some((item) => item.id === saved.id);
+      return existing ? items.map((item) => (item.id === saved.id ? saved : item)) : [...items, saved];
+    });
+    setSelectedId(saved.id);
+    setDraft(saved);
+    setBufferStatus(`Saved ${saved.name}.`);
   }
 
   function deleteCurrentBuffer() {
-    const remaining = props.buffers.filter((item) => item.id !== buffer.id);
-    if (remaining.length > 0) {
-      props.setBuffers(remaining);
-      setSelectedId(remaining[0].id);
+    if (!draftIsSaved) {
+      const fallback = props.buffers[0] ? cloneBuffer(props.buffers[0]) : createBlankBuffer();
+      setSelectedId(fallback.id);
+      setDraft(fallback);
+      setBufferStatus(props.buffers[0] ? "Discarded unsaved buffer." : "New buffer draft. Tap Save to keep it.");
       return;
     }
 
-    const next = { id: uid("buffer"), name: "New buffer", targetVolumeMl: 100, components: [], notes: "" };
-    props.setBuffers([next]);
+    const remaining = props.buffers.filter((item) => item.id !== draft.id);
+    if (remaining.length > 0) {
+      props.setBuffers(remaining);
+      setSelectedId(remaining[0].id);
+      setDraft(cloneBuffer(remaining[0]));
+      setBufferStatus("Deleted buffer.");
+      return;
+    }
+
+    const next = createBlankBuffer();
+    props.setBuffers([]);
     setSelectedId(next.id);
+    setDraft(next);
+    setBufferStatus("Deleted buffer. New buffer draft ready.");
   }
 
   return (
@@ -727,39 +780,43 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
         <>
           <ActionButton
             icon={Plus}
-            onClick={() => {
-              const next = { id: uid("buffer"), name: "New buffer", targetVolumeMl: 100, components: [], notes: "" };
-              props.setBuffers((items) => [...items, next]);
-              setSelectedId(next.id);
-            }}
+            onClick={addBufferDraft}
           >
             Buffer
           </ActionButton>
+          <ActionButton icon={Save} variant="primary" onClick={saveBuffer} disabled={!isDirty}>
+            Save
+          </ActionButton>
           <IconButton label="Delete buffer" icon={Trash2} variant="danger" onClick={deleteCurrentBuffer} />
-          <IconButton label="Export CSV" icon={Download} onClick={() => downloadBufferCsv(buffer)} />
+          <IconButton label="Export CSV" icon={Download} onClick={() => downloadBufferCsv(draft)} />
         </>
       }
     >
       <div className="fields">
-        <label className="field">
-          <span>Buffer</span>
-          <input list="buffer-names" value={buffer.name} onChange={(event) => handleBufferName(event.target.value)} />
-          <datalist id="buffer-names">
+        <label className="field select-field">
+          <span>Select buffer</span>
+          <select value={selectedId} onChange={(event) => selectBuffer(event.target.value)} aria-label="Select buffer">
+            {!draftIsSaved ? <option value={draft.id}>{draft.name || "New buffer"} (unsaved)</option> : null}
             {props.buffers.map((item) => (
-              <option key={item.id} value={item.name} />
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
             ))}
-          </datalist>
+          </select>
+          <ChevronDown size={16} aria-hidden="true" />
         </label>
+        <TextField label="Rename selected buffer" value={draft.name} onChange={(name) => editDraft({ name })} />
         <NumberWithUnitField
           label="Target volume"
-          value={convertUnit(buffer.targetVolumeMl, "mL", targetVolumeUnit)}
-          onChange={(value) => updateBuffer({ targetVolumeMl: convertUnit(value, targetVolumeUnit, "mL") })}
+          value={convertUnit(draft.targetVolumeMl, "mL", targetVolumeUnit)}
+          onChange={(value) => editDraft({ targetVolumeMl: convertUnit(value, targetVolumeUnit, "mL") })}
           unit={targetVolumeUnit}
           onUnitChange={setTargetVolumeUnit}
           units={["mL", "L"]}
           min={0}
         />
       </div>
+      {bufferStatus || isDirty ? <p className="status-line">{bufferStatus || "Unsaved changes"}</p> : null}
       <div className="table-wrap">
         <table>
           <thead>
@@ -771,15 +828,15 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
             </tr>
           </thead>
           <tbody>
-            {buffer.components.map((component) => (
+            {draft.components.map((component) => (
               <tr key={component.id}>
                 <td>
                   <input
                     value={component.name}
                     aria-label="Component"
                     onChange={(event) =>
-                      updateBuffer({
-                        components: buffer.components.map((item) => (item.id === component.id ? { ...item, name: event.target.value } : item))
+                      editDraft({
+                        components: draft.components.map((item) => (item.id === component.id ? { ...item, name: event.target.value } : item))
                       })
                     }
                   />
@@ -792,8 +849,8 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
                       value={component.amountPerLiter}
                       aria-label="Amount per liter"
                       onChange={(event) =>
-                        updateBuffer({
-                          components: buffer.components.map((item) =>
+                        editDraft({
+                          components: draft.components.map((item) =>
                             item.id === component.id ? { ...item, amountPerLiter: safeNumber(event.target.value) } : item
                           )
                         })
@@ -803,8 +860,8 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
                       value={component.unit}
                       aria-label="Unit"
                       onChange={(event) =>
-                        updateBuffer({
-                          components: buffer.components.map((item) => (item.id === component.id ? { ...item, unit: event.target.value } : item))
+                        editDraft({
+                          components: draft.components.map((item) => (item.id === component.id ? { ...item, unit: event.target.value } : item))
                         })
                       }
                     >
@@ -817,14 +874,14 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
                   </div>
                 </td>
                 <td>
-                  {formatNumber(bufferAmountForVolume(component.amountPerLiter, buffer.targetVolumeMl, "mL"))} {component.unit}
+                  {formatNumber(bufferAmountForVolume(component.amountPerLiter, draft.targetVolumeMl, "mL"))} {component.unit}
                 </td>
                 <td>
                   <IconButton
                     label="Delete component"
                     icon={Trash2}
                     variant="danger"
-                    onClick={() => updateBuffer({ components: buffer.components.filter((item) => item.id !== component.id) })}
+                    onClick={() => editDraft({ components: draft.components.filter((item) => item.id !== component.id) })}
                   />
                 </td>
               </tr>
@@ -833,11 +890,11 @@ function BufferTool(props: { buffers: BufferRecipe[]; setBuffers: Dispatch<SetSt
         </table>
       </div>
       <div className="row-actions">
-        <ActionButton icon={Plus} onClick={() => updateBuffer({ components: [...buffer.components, { id: uid("component"), name: "", amountPerLiter: 0, unit: "g" }] })}>
+        <ActionButton icon={Plus} onClick={() => editDraft({ components: [...draft.components, { id: uid("component"), name: "", amountPerLiter: 0, unit: "g" }] })}>
           Component
         </ActionButton>
       </div>
-      <TextArea label="Notes" value={buffer.notes} onChange={(notes) => updateBuffer({ notes })} />
+      <TextArea label="Notes" value={draft.notes} onChange={(notes) => editDraft({ notes })} />
     </Panel>
   );
 }

@@ -19,7 +19,7 @@ A phone-first, local-first Progressive Web App for common biology bench workflow
 - Dilution, molarity, serial dilution, mass-to-molarity, and mass-needed calculators with changeable units
 - Master mix builder with reaction count, overage, changeable volume units, and low-volume warnings
 - Sample tracker with freezer/box/position, freeze-thaw count, search, CSV export, and QR/barcode photo upload or camera-app capture
-- Buffer/media scaler with editable buffer names, target-volume units, and component units
+- Buffer/media scaler with separate select, rename, and save controls plus target-volume and component units
 - qPCR delta-delta Ct helper with efficiency and fold-change readout
 - Cell culture counter, viability, and seeding-volume calculator
 - Experiment log with text notes, photo-library uploads, camera-app photo attachments, and timestamps
