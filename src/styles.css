@@ -159,6 +159,68 @@ code {
   flex-wrap: wrap;
 }
 
+.backup-details {
+  margin: 0.65rem 0 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.backup-details summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  padding: 0.55rem 0.7rem;
+  color: var(--ink);
+  font-weight: 900;
+  cursor: pointer;
+  list-style: none;
+}
+
+.backup-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.backup-details summary svg {
+  width: 20px;
+  height: 20px;
+  color: var(--primary);
+  flex: 0 0 auto;
+}
+
+.backup-details summary small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.backup-panel {
+  display: grid;
+  gap: 0.55rem;
+  border-top: 1px solid var(--line);
+  padding: 0.65rem;
+}
+
+.backup-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.backup-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.backup-actions .action {
+  flex: 1 1 150px;
+}
+
 .group-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -739,6 +801,30 @@ code {
 
   .eyebrow {
     display: none;
+  }
+
+  .backup-details {
+    margin: 0.45rem 0 0.5rem;
+  }
+
+  .backup-details summary {
+    min-height: 48px;
+    padding: 0.55rem 0.6rem;
+  }
+
+  .backup-details summary svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .backup-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .backup-actions .action {
+    width: 100%;
+    min-height: 48px;
   }
 
   .icon-button {

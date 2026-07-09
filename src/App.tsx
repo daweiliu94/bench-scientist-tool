@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Download,
   FlaskConical,
+  FolderOpen,
   Home,
   ImagePlus,
   Layers,
@@ -46,7 +47,8 @@ import {
   serialDilution,
   viabilityPercent
 } from "./lib/calculations";
-import { downloadJson, exportBenchData, importBenchData, readFileAsDataUrl, uid, usePersistentState } from "./lib/storage";
+import { exportBenchData, importBenchData, readFileAsDataUrl, saveJsonBackup, uid, usePersistentState } from "./lib/storage";
+import type { BenchData } from "./lib/storage";
 import type {
   BufferRecipe,
   ExperimentLog,
@@ -277,7 +279,10 @@ function App() {
   const [logs, setLogs] = usePersistentState<ExperimentLog[]>("logs", []);
   const [gels, setGels] = usePersistentState<GelRecord[]>("gels", []);
   const [safety, setSafety] = usePersistentState<SafetyRecord[]>("safety", DEFAULT_SAFETY);
-  const importRef = useRef<HTMLInputElement | null>(null);
+  const visibleBenchData = useMemo(
+    () => ({ samples, reagents, buffers, logs, gels, safety }),
+    [samples, reagents, buffers, logs, gels, safety]
+  );
   const activeDefinition = TOOLS.find((tool) => tool.id === activeTool) ?? TOOLS[0];
   const activeGroup = activeDefinition.group;
 
@@ -288,13 +293,6 @@ function App() {
     window.history.replaceState(null, "", nextUrl);
   }
 
-  async function handleImport(file?: File) {
-    if (!file) return;
-    const text = await file.text();
-    importBenchData(JSON.parse(text));
-    window.location.reload();
-  }
-
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -302,12 +300,9 @@ function App() {
           <p className="eyebrow">Local bench companion</p>
           <h1>Bench Tool</h1>
         </div>
-        <div className="top-actions">
-          <IconButton label="Export backup" icon={Download} onClick={() => downloadJson(`bench-tool-${today()}.json`, exportBenchData())} />
-          <IconButton label="Import backup" icon={Upload} onClick={() => importRef.current?.click()} />
-          <input ref={importRef} className="hidden-input" type="file" accept="application/json" onChange={(event) => handleImport(event.target.files?.[0])} />
-        </div>
       </header>
+
+      <DataBackupPanel data={visibleBenchData} />
 
       <nav className="group-tabs" aria-label="Tool groups">
         {GROUPS.map((group) => {
@@ -350,6 +345,84 @@ function App() {
         setSafety={setSafety}
       />
     </main>
+  );
+}
+
+function DataBackupPanel(props: { data: BenchData }) {
+  const importRef = useRef<HTMLInputElement | null>(null);
+  const [backupStatus, setBackupStatus] = useState("Offline data stays on this iPhone. Back up a JSON copy to the iCloud Drive or Files folder you choose.");
+
+  async function handleBackup(mode: "backup" | "folder") {
+    const filename = `bench-tool-${today()}.json`;
+    const prompt =
+      mode === "folder"
+        ? "Choose the new iCloud Drive or Files folder in the save sheet."
+        : "Choose the iCloud Drive or Files folder for this backup.";
+    setBackupStatus(prompt);
+
+    try {
+      const result = await saveJsonBackup(filename, exportBenchData(props.data));
+      setBackupStatus(
+        result === "shared"
+          ? `Backup ready: ${filename}. Restore from that JSON to bring back the same visible records.`
+          : `Downloaded ${filename}. Move it into iCloud Drive or your preferred Files folder.`
+      );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setBackupStatus("Backup canceled. Your offline data is still unchanged on this iPhone.");
+        return;
+      }
+      console.warn("Could not save Bench Tool backup", error);
+      setBackupStatus("Could not start the backup. Try again, or use Restore only when you already have a JSON backup.");
+    }
+  }
+
+  async function handleImport(file?: File) {
+    if (!file) return;
+    setBackupStatus(`Restoring ${file.name}...`);
+    try {
+      const text = await file.text();
+      importBenchData(JSON.parse(text));
+      setBackupStatus("Restore complete. Reloading the app with the backup data...");
+      window.location.reload();
+    } catch (error) {
+      console.warn("Could not restore Bench Tool backup", error);
+      setBackupStatus(error instanceof Error ? error.message : "Could not restore that backup file.");
+    }
+  }
+
+  return (
+    <details className="backup-details">
+      <summary>
+        <Save aria-hidden="true" />
+        <span>Backup & restore</span>
+        <small>offline-first</small>
+      </summary>
+      <div className="backup-panel">
+        <p>{backupStatus}</p>
+        <div className="backup-actions">
+          <ActionButton icon={Download} variant="primary" onClick={() => handleBackup("backup")}>
+            Back up to iCloud
+          </ActionButton>
+          <ActionButton icon={FolderOpen} onClick={() => handleBackup("folder")}>
+            Change folder
+          </ActionButton>
+          <ActionButton icon={Upload} onClick={() => importRef.current?.click()}>
+            Restore from iCloud
+          </ActionButton>
+        </div>
+        <input
+          ref={importRef}
+          className="hidden-input"
+          type="file"
+          accept=".json,application/json"
+          onChange={(event) => {
+            handleImport(event.target.files?.[0]);
+            event.currentTarget.value = "";
+          }}
+        />
+      </div>
+    </details>
   );
 }
 

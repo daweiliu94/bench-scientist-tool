@@ -27,7 +27,7 @@ A phone-first, local-first Progressive Web App for common biology bench workflow
 - Gel/blot image upload or camera capture with lane annotations
 - Unit conversion for mass, volume, concentration, temperature, RPM, and RCF
 - Safety quick reference with PPE, waste, SDS links, and notes
-- Local JSON backup export/import
+- Offline-first local storage with JSON backup/restore through iCloud Drive or Files
 
 ## Run Locally
 
@@ -60,4 +60,6 @@ npm audit --omit=optional
 
 Deploy the built static app from `dist/` to GitHub Pages, Netlify, Vercel, or Cloudflare Pages. Then open the deployed HTTPS URL in Safari on the iPhone and use Share -> Add to Home Screen.
 
-The app stores data in browser storage on the device. Use the backup export/import buttons before clearing browser data or changing phones.
+The app stores its working data in browser storage on the device, so it remains usable offline after the PWA has loaded. Use **Backup & restore** to save a JSON copy to iCloud Drive or another Files folder, or to restore from that same JSON later.
+
+On iPhone, the web app cannot silently own a permanent iCloud folder the way a native app with iCloud entitlements could. The **Back up to iCloud** and **Change folder** buttons open the iOS share/save flow so you choose the destination. **Restore from iCloud** imports the selected JSON and replaces the visible app data with the backup contents.
